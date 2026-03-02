@@ -3,6 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Designs">
+
     <title>Design Presentation</title>
     <style>
         body, html {
@@ -18,7 +23,6 @@
             display: flex; 
             width: 100vw; height: 100vh;
             overflow-x: auto; overflow-y: hidden;
-            /* Snapping is enabled via JS once images load to prevent initial "half-way" glitches */
             scroll-snap-type: none; 
             -webkit-overflow-scrolling: touch; 
             scrollbar-width: none; 
@@ -31,7 +35,9 @@
             scroll-snap-align: center;
             display: flex; justify-content: center; align-items: center;
         }
+        
         .slide img {
+            /* This ensures the design fills the screen perfectly */
             max-width: 100%; max-height: 100%;
             object-fit: contain; pointer-events: none;
         }
@@ -39,7 +45,10 @@
         #loader { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #444; font-size: 14px; }
 
         #pagination {
-            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            position: fixed; 
+            /* env(safe-area-inset-bottom) prevents dots from hitting the "home bar" */
+            bottom: calc(30px + env(safe-area-inset-bottom)); 
+            left: 50%; transform: translateX(-50%);
             display: flex; gap: 10px; z-index: 20; padding: 8px 12px;
             border-radius: 20px; background-color: rgba(0, 0, 0, 0.4); 
             backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
@@ -50,7 +59,9 @@
         .dot.active { background-color: #fff; transform: scale(1.3); }
 
         #filename-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; padding: 30px 0;
+            position: fixed; top: 0; left: 0; width: 100%; 
+            /* safe-area-inset-top ensures text clears the notch */
+            padding: calc(30px + env(safe-area-inset-top)) 0 30px 0;
             background: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, transparent 100%);
             color: white; text-align: center; font-size: 13px; z-index: 30;
             opacity: 0; transform: translateY(-10px); transition: all 0.25s ease; pointer-events: none;
@@ -112,18 +123,16 @@
                 });
 
                 if (slidesData.length > 1) {
-                    // Build clones
                     const firstClone = slidesData[0].cloneNode(true);
                     const lastClone = slidesData[slidesData.length - 1].cloneNode(true);
                     carousel.prepend(lastClone);
                     carousel.append(firstClone);
 
-                    // CRITICAL: Ensure dimensions are ready before jump
                     requestAnimationFrame(() => {
                         requestAnimationFrame(() => {
                             carousel.scrollLeft = carousel.offsetWidth;
                             carousel.style.opacity = "1";
-                            carousel.style.scrollSnapType = "x mandatory"; // Enable snapping ONLY after jump
+                            carousel.style.scrollSnapType = "x mandatory";
                             document.getElementById('loader').style.display = 'none';
                         });
                     });
@@ -138,31 +147,23 @@
 
         function handleScroll() {
             if (isTeleporting) return;
-
-            const w = carousel.offsetWidth;
-            const x = carousel.scrollLeft;
+            const w = carousel.offsetWidth, x = carousel.scrollLeft;
             const totalWidth = w * (slidesData.length + 1);
 
-            // Update Dots
             let idx = Math.round(x / w);
             let dotIdx = (idx === 0) ? slidesData.length - 1 : (idx > slidesData.length) ? 0 : idx - 1;
-            
             dots.forEach((d, i) => d.classList.toggle('active', i === dotIdx));
             
             pagination.classList.add('visible');
             clearTimeout(hidePageTimer);
             hidePageTimer = setTimeout(() => pagination.classList.remove('visible'), 1000);
 
-            // Teleport Logic
             if (x <= 5 || x >= totalWidth - 5) {
                 isTeleporting = true;
-                carousel.style.scrollSnapType = "none"; // Disable snapping to allow teleport
-                
+                carousel.style.scrollSnapType = "none";
                 setTimeout(() => {
                     if (x <= 5) carousel.scrollLeft = w * slidesData.length;
                     else if (x >= totalWidth - 5) carousel.scrollLeft = w;
-                    
-                    // Re-enable snapping after the browser finishes the jump
                     requestAnimationFrame(() => {
                         carousel.style.scrollSnapType = "x mandatory";
                         isTeleporting = false;
@@ -171,19 +172,13 @@
             }
         }
 
-        // Tap Navigation (Using scrollLeft for precision)
         function navigate(dir) {
-            const w = carousel.offsetWidth;
-            carousel.scrollTo({
-                left: carousel.scrollLeft + (dir * w),
-                behavior: 'smooth'
-            });
+            carousel.scrollTo({ left: carousel.scrollLeft + (dir * carousel.offsetWidth), behavior: 'smooth' });
         }
 
         document.getElementById('next-zone').addEventListener('click', () => navigate(1));
         document.getElementById('prev-zone').addEventListener('click', () => navigate(-1));
 
-        // Long Press for Filename
         let pTimer;
         function show() {
             const idx = Math.round(carousel.scrollLeft / carousel.offsetWidth);
