@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Design Presentation</title>
     <style>
         body, html {
@@ -10,25 +10,24 @@
             width: 100%; height: 100%;
             background-color: #000;
             overflow: hidden; 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            -webkit-user-select: none;
-            user-select: none;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            -webkit-user-select: none; user-select: none;
         }
 
         #carousel {
-            display: flex; width: 100vw; height: 100vh;
+            display: flex; 
+            width: 100vw; height: 100vh;
             overflow-x: auto; overflow-y: hidden;
-            scroll-snap-type: x mandatory; 
+            /* Snapping is enabled via JS once images load to prevent initial "half-way" glitches */
+            scroll-snap-type: none; 
             -webkit-overflow-scrolling: touch; 
             scrollbar-width: none; 
-            opacity: 0; transition: opacity 0.4s ease;
-            scroll-behavior: smooth;
+            opacity: 0; transition: opacity 0.5s ease;
         }
-        #carousel.ready { opacity: 1; }
         #carousel::-webkit-scrollbar { display: none; }
 
         .slide {
-            flex: 0 0 100vw; height: 100vh;
+            flex: 0 0 100vw; width: 100vw; height: 100vh;
             scroll-snap-align: center;
             display: flex; justify-content: center; align-items: center;
         }
@@ -39,43 +38,22 @@
 
         #loader { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #444; font-size: 14px; }
 
-        /* Updated Pagination: Auto-hides and has better contrast */
         #pagination {
-            position: fixed; 
-            bottom: 30px; 
-            left: 50%; 
-            transform: translateX(-50%);
-            display: flex; 
-            gap: 10px; 
-            z-index: 20; 
-            padding: 8px 12px;
-            border-radius: 20px;
-            background-color: rgba(0, 0, 0, 0.3); /* Subtle backdrop for visibility */
-            backdrop-filter: blur(4px); /* iOS style blur */
-            opacity: 0; /* Hidden by default */
-            transition: opacity 0.3s ease;
-            pointer-events: none;
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 10px; z-index: 20; padding: 8px 12px;
+            border-radius: 20px; background-color: rgba(0, 0, 0, 0.4); 
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            opacity: 0; transition: opacity 0.3s ease; pointer-events: none;
         }
         #pagination.visible { opacity: 1; }
-
-        .dot { 
-            width: 6px; height: 6px; 
-            border-radius: 50%; 
-            background-color: rgba(255,255,255,0.3); 
-            transition: all 0.3s ease; 
-        }
-        .dot.active { 
-            background-color: rgba(255,255,255,1); 
-            transform: scale(1.3); 
-        }
+        .dot { width: 6px; height: 6px; border-radius: 50%; background-color: rgba(255,255,255,0.3); transition: all 0.3s ease; }
+        .dot.active { background-color: #fff; transform: scale(1.3); }
 
         #filename-overlay {
-            position: fixed; top: 0; left: 0; width: 100%;
-            padding: 25px 0;
+            position: fixed; top: 0; left: 0; width: 100%; padding: 30px 0;
             background: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, transparent 100%);
-            color: white; text-align: center; font-size: 13px; letter-spacing: 0.5px;
-            z-index: 30; opacity: 0; transform: translateY(-10px);
-            transition: all 0.25s ease; pointer-events: none;
+            color: white; text-align: center; font-size: 13px; z-index: 30;
+            opacity: 0; transform: translateY(-10px); transition: all 0.25s ease; pointer-events: none;
         }
         #filename-overlay.show { opacity: 1; transform: translateY(0); }
 
@@ -86,7 +64,7 @@
 </head>
 <body>
 
-    <div id="loader">Loading...</div>
+    <div id="loader">Loading Designs...</div>
     <div id="filename-overlay"></div>
     <div id="carousel"></div>
     <div id="pagination"></div>
@@ -104,23 +82,23 @@
         // ==========================================
         
         const carousel = document.getElementById('carousel');
-        const overlay = document.getElementById('filename-overlay');
         const pagination = document.getElementById('pagination');
+        const overlay = document.getElementById('filename-overlay');
         let slidesData = [];
         let dots = [];
-        let pressTimer;
-        let hidePaginationTimer;
+        let isTeleporting = false;
+        let hidePageTimer;
 
-        async function loadImages() {
+        async function init() {
             try {
-                const response = await fetch(`https://api.github.com/repos/${githubUsername}/${githubRepo}/contents/${folderPath}`);
-                const files = await response.json();
-                const imageFiles = files.filter(f => f.name.match(/\.(jpg|jpeg|png|gif|webp)$/i));
+                const res = await fetch(`https://api.github.com/repos/${githubUsername}/${githubRepo}/contents/${folderPath}`);
+                const files = await res.json();
+                const images = files.filter(f => f.name.match(/\.(jpg|jpeg|png|gif|webp)$/i));
 
-                imageFiles.forEach((file, index) => {
+                images.forEach((file, i) => {
                     const slide = document.createElement('div');
                     slide.className = 'slide';
-                    const img = document.createElement('img');
+                    const img = new Image();
                     img.src = file.download_url;
                     img.dataset.name = file.name;
                     slide.appendChild(img);
@@ -134,73 +112,94 @@
                 });
 
                 if (slidesData.length > 1) {
-                    carousel.insertAdjacentElement('afterbegin', slidesData[slidesData.length-1].cloneNode(true));
-                    carousel.appendChild(slidesData[0].cloneNode(true));
-                    setTimeout(() => {
-                        carousel.scrollLeft = carousel.offsetWidth;
-                        document.getElementById('loader').style.display = 'none';
-                        carousel.classList.add('ready'); 
-                    }, 50);
-                    carousel.addEventListener('scroll', handleScroll);
-                } else {
-                    document.getElementById('loader').style.display = 'none';
-                    carousel.classList.add('ready');
-                }
-            } catch (e) { document.getElementById('loader').innerText = "Error loading."; }
-        }
+                    // Build clones
+                    const firstClone = slidesData[0].cloneNode(true);
+                    const lastClone = slidesData[slidesData.length - 1].cloneNode(true);
+                    carousel.prepend(lastClone);
+                    carousel.append(firstClone);
 
-        function showPaginationBriefly() {
-            pagination.classList.add('visible');
-            clearTimeout(hidePaginationTimer);
-            hidePaginationTimer = setTimeout(() => {
-                pagination.classList.remove('visible');
-            }, 1200); // Fades out after 1.2 seconds of no movement
+                    // CRITICAL: Ensure dimensions are ready before jump
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            carousel.scrollLeft = carousel.offsetWidth;
+                            carousel.style.opacity = "1";
+                            carousel.style.scrollSnapType = "x mandatory"; // Enable snapping ONLY after jump
+                            document.getElementById('loader').style.display = 'none';
+                        });
+                    });
+
+                    carousel.addEventListener('scroll', handleScroll, { passive: true });
+                } else {
+                    carousel.style.opacity = "1";
+                    document.getElementById('loader').style.display = 'none';
+                }
+            } catch (e) { console.error(e); }
         }
 
         function handleScroll() {
-            showPaginationBriefly();
-            const w = carousel.offsetWidth, x = carousel.scrollLeft;
+            if (isTeleporting) return;
+
+            const w = carousel.offsetWidth;
+            const x = carousel.scrollLeft;
+            const totalWidth = w * (slidesData.length + 1);
+
+            // Update Dots
             let idx = Math.round(x / w);
             let dotIdx = (idx === 0) ? slidesData.length - 1 : (idx > slidesData.length) ? 0 : idx - 1;
+            
             dots.forEach((d, i) => d.classList.toggle('active', i === dotIdx));
+            
+            pagination.classList.add('visible');
+            clearTimeout(hidePageTimer);
+            hidePageTimer = setTimeout(() => pagination.classList.remove('visible'), 1000);
 
-            if (x <= 5) teleport(w * slidesData.length);
-            else if (x >= w * (slidesData.length + 1) - 5) teleport(w);
+            // Teleport Logic
+            if (x <= 5 || x >= totalWidth - 5) {
+                isTeleporting = true;
+                carousel.style.scrollSnapType = "none"; // Disable snapping to allow teleport
+                
+                setTimeout(() => {
+                    if (x <= 5) carousel.scrollLeft = w * slidesData.length;
+                    else if (x >= totalWidth - 5) carousel.scrollLeft = w;
+                    
+                    // Re-enable snapping after the browser finishes the jump
+                    requestAnimationFrame(() => {
+                        carousel.style.scrollSnapType = "x mandatory";
+                        isTeleporting = false;
+                    });
+                }, 50);
+            }
         }
 
-        function teleport(pos) {
-            clearTimeout(window.tpTimer);
-            window.tpTimer = setTimeout(() => {
-                carousel.style.scrollBehavior = 'auto';
-                carousel.scrollLeft = pos;
-                carousel.style.scrollBehavior = 'smooth';
-            }, 300);
-        }
-
-        function showName() {
+        // Tap Navigation (Using scrollLeft for precision)
+        function navigate(dir) {
             const w = carousel.offsetWidth;
-            const idx = Math.round(carousel.scrollLeft / w);
+            carousel.scrollTo({
+                left: carousel.scrollLeft + (dir * w),
+                behavior: 'smooth'
+            });
+        }
+
+        document.getElementById('next-zone').addEventListener('click', () => navigate(1));
+        document.getElementById('prev-zone').addEventListener('click', () => navigate(-1));
+
+        // Long Press for Filename
+        let pTimer;
+        function show() {
+            const idx = Math.round(carousel.scrollLeft / carousel.offsetWidth);
             const realIdx = (idx === 0) ? slidesData.length - 1 : (idx > slidesData.length) ? 0 : idx - 1;
             overlay.innerText = slidesData[realIdx].querySelector('img').dataset.name;
             overlay.classList.add('show');
         }
+        const hide = () => overlay.classList.remove('show');
+        
+        window.addEventListener('touchstart', () => pTimer = setTimeout(show, 500));
+        window.addEventListener('touchend', () => { clearTimeout(pTimer); hide(); });
+        window.addEventListener('mousedown', () => pTimer = setTimeout(show, 500));
+        window.addEventListener('mouseup', () => { clearTimeout(pTimer); hide(); });
+        window.addEventListener('contextmenu', e => e.preventDefault());
 
-        function hideName() { overlay.classList.remove('show'); }
-
-        window.addEventListener('mousedown', () => pressTimer = setTimeout(showName, 500));
-        window.addEventListener('mouseup', () => { clearTimeout(pressTimer); hideName(); });
-        window.addEventListener('touchstart', () => pressTimer = setTimeout(showName, 500), {passive: true});
-        window.addEventListener('touchend', () => { clearTimeout(pressTimer); hideName(); });
-        window.addEventListener('contextmenu', (e) => e.preventDefault());
-
-        document.getElementById('next-zone').addEventListener('click', () => {
-            carousel.scrollBy({ left: carousel.offsetWidth, behavior: 'smooth' });
-        });
-        document.getElementById('prev-zone').addEventListener('click', () => {
-            carousel.scrollBy({ left: -carousel.offsetWidth, behavior: 'smooth' });
-        });
-
-        loadImages();
+        init();
     </script>
 </body>
 </html>
